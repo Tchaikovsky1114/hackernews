@@ -117,8 +117,39 @@ parcelRequire = (function (modules, cache, entry, globalName) {
   }
 
   return newRequire;
-})({"app.js":[function(require,module,exports) {
-var container = document.getElementById('root');
+})({"app.ts":[function(require,module,exports) {
+"use strict";
+
+var __extends = this && this.__extends || function () {
+  var _extendStatics = function extendStatics(d, b) {
+    _extendStatics = Object.setPrototypeOf || {
+      __proto__: []
+    } instanceof Array && function (d, b) {
+      d.__proto__ = b;
+    } || function (d, b) {
+      for (var p in b) {
+        if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p];
+      }
+    };
+
+    return _extendStatics(d, b);
+  };
+
+  return function (d, b) {
+    if (typeof b !== "function" && b !== null) throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+
+    _extendStatics(d, b);
+
+    function __() {
+      this.constructor = d;
+    }
+
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+  };
+}();
+
+var container = document.getElementById('root'); // 반환하는 값은 DOM Element
+
 var ajax = new XMLHttpRequest();
 var content = document.createElement('div');
 var NEWS_URL = 'https://api.hnpwa.com/v0/news/1.json';
@@ -128,10 +159,68 @@ var store = {
   feeds: []
 };
 
-function getData(url) {
-  ajax.open('GET', url, false);
-  ajax.send();
-  return JSON.parse(ajax.response);
+var Api =
+/** @class */
+function () {
+  function Api(url) {
+    this.url = url;
+    this.ajax = new XMLHttpRequest();
+  }
+
+  Api.prototype.getRequest = function () {
+    this.ajax.open('GET', this.url, false);
+    this.ajax.send();
+    return JSON.parse(this.ajax.response);
+  };
+
+  return Api;
+}();
+
+var NewsFeedApi =
+/** @class */
+function (_super) {
+  __extends(NewsFeedApi, _super);
+
+  function NewsFeedApi() {
+    return _super !== null && _super.apply(this, arguments) || this;
+  }
+
+  NewsFeedApi.prototype.getData = function () {
+    return this.getRequest();
+  };
+
+  return NewsFeedApi;
+}(Api);
+
+var NewsDetailApi =
+/** @class */
+function (_super) {
+  __extends(NewsDetailApi, _super);
+
+  function NewsDetailApi() {
+    return _super !== null && _super.apply(this, arguments) || this;
+  }
+
+  NewsDetailApi.prototype.getData = function () {
+    return this.getRequest();
+  };
+
+  return NewsDetailApi;
+}(Api); // getData 는 2가지 유형을 반환한다. newsFeed, newsDetail
+// function getData<AjaxResponse>(url: string): AjaxResponse {
+//   ajax.open('GET', url, false);
+//   ajax.send();
+//   //객체로 바꾼 뒤 리턴한다.
+//   return JSON.parse(ajax.response);
+// }
+
+
+function updateView(html) {
+  if (container) {
+    container.innerHTML = html;
+  } else {
+    console.error("최상위 컨테이너가 없어 UI를 진행하지 못합니다.");
+  }
 }
 
 function newsFeed() {
@@ -142,7 +231,8 @@ function newsFeed() {
 
   if (newsFeed.length === 0) {
     // 같은 데이터를 연속적으로 넣어줄 수 있다.
-    newsFeed = store.feeds = makeFeeds(getData(NEWS_URL));
+    var api = new NewsFeedApi(NEWS_URL);
+    newsFeed = store.feeds = makeFeeds(api.getData());
   }
 
   function makeFeeds(feeds) {
@@ -158,14 +248,15 @@ function newsFeed() {
   }
 
   template = template.replace('{{__news_feed__}}', newsList.join(''));
-  template = template.replace('{{__prev_page__}}', store.currentPage > 1 ? store.currentPage - 1 : 1);
-  template = template.replace('{{__next_page__}}', store.currentPage + 1);
-  container.innerHTML = template;
+  template = template.replace('{{__prev_page__}}', String(store.currentPage > 1 ? store.currentPage - 1 : 1));
+  template = template.replace('{{__next_page__}}', String(store.currentPage + 1));
+  updateView(template);
 }
 
 function newsDetail() {
   var id = location.hash.substr(7);
-  var newsContent = getData(CONTENT_URL.replace('@id', id));
+  var newsDetail = new NewsDetailApi(CONTENT_URL.replace('@id', id));
+  var newsContent = newsDetail.getData();
   var template = "\n  <div class=\"bg-gray-600 min-h-screen pb-8\">\n  <div class=\"bg-white text-xl\">\n    <div class=\"mx-auto px-4\">\n      <div class=\"flex justify-between items-center py-6\">\n        <div class=\"flex justify-start\">\n          <h1 class=\"font-extrabold\">Hacker News</h1>\n        </div>\n        <div class=\"items-center justify-end\">\n          <a href=\"#/page/".concat(store.currentPage, "\" class=\"text-gray-500\">\n            <i class=\"fa fa-times\"></i>\n          </a>\n        </div>\n      </div>\n    </div>\n  </div>\n\n  <div class=\"h-full border rounded-xl bg-white m-6 p-4 \">\n    <h2>").concat(newsContent.title, "</h2>\n    <div class=\"text-gray-400 h-20\">\n      ").concat(newsContent.content, "\n    </div>\n\n    {{__comments__}}\n\n  </div>\n</div>\n  ");
 
   for (var i = 0; i < store.feeds.length; i++) {
@@ -175,23 +266,23 @@ function newsDetail() {
     }
   }
 
-  function makeComment(comments) {
-    var called = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
-    var commentString = [];
+  updateView(template.replace('{{__comments__}}', makeComment(newsContent.comments)));
+}
 
-    for (var _i = 0; _i < comments.length; _i++) {
-      commentString.push("\n      <div style=\"padding-left: ".concat(called * 40, "px;\" class=\"mt-4\">\n      <div class=\"text-gray-400\">\n      <i class=\"fa fa-sort-up mr-2\"></i>\n      <string>").concat(comments[_i].user, "</strong> ").concat(comments[_i].time_ago, "\n      </div>\n      <p class=\"text-gray-700\">").concat(comments[_i].content, "</p>\n      </div>\n      "));
+function makeComment(comments) {
+  var commentString = [];
 
-      if (comments[_i].comments.length > 0) {
-        //재귀 호출. 인자로 called +1을 주어 호출 될 때마다(deps를 1단계씩 더 들어갈 때마다) padding-left의 값을 늘린다.
-        commentString.push(makeComment(comments[_i].comments, called + 1));
-      }
+  for (var i = 0; i < comments.length; i++) {
+    var comment = comments[i];
+    commentString.push("\n    <div style=\"padding-left: ".concat(comment.level * 40, "px;\" class=\"mt-4\">\n    <div class=\"text-gray-400\">\n    <i class=\"fa fa-sort-up mr-2\"></i>\n    <string>").concat(comment.user, "</strong> ").concat(comment.time_ago, "\n    </div>\n    <p class=\"text-gray-700\">").concat(comment.content, "</p>\n    </div>\n    "));
+
+    if (comment.comments.length > 0) {
+      //재귀 호출. 인자로 called +1을 주어 호출 될 때마다(deps를 1단계씩 더 들어갈 때마다) padding-left의 값을 늘린다.
+      commentString.push(makeComment(comment.comments));
     }
-
-    return commentString.join('');
   }
 
-  container.innerHTML = template.replace('{{__comments__}}', makeComment(newsContent.comments));
+  return commentString.join('');
 }
 
 function router() {
@@ -237,7 +328,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "60818" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "56171" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
@@ -413,5 +504,5 @@ function hmrAcceptRun(bundle, id) {
     return true;
   }
 }
-},{}]},{},["../Users/owner/AppData/Roaming/npm/node_modules/parcel-bundler/src/builtins/hmr-runtime.js","app.js"], null)
-//# sourceMappingURL=/app.c328ef1a.js.map
+},{}]},{},["../Users/owner/AppData/Roaming/npm/node_modules/parcel-bundler/src/builtins/hmr-runtime.js","app.ts"], null)
+//# sourceMappingURL=/app.c61986b1.js.map
